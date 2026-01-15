@@ -1,0 +1,90 @@
+---
+title: "splash_build.Rmd"
+output: html_document
+date: "2025-11-26"
+---
+
+# This script generates 3 files for annotated exon boundaries, splice sites, and gene coordinates from a gtf file
+(This script was copied from the SPLASH repo – I just inserted the necessary paths)
+
+```{r} 
+
+library(data.table)
+
+gtf_file         <- "/projectnb/bf527/students/hbeakley/project/results/ncbi_dataset/data/GCF_009914755.1/genomic.gtf"
+hisat2_directory <- "/projectnb/bf527/students/hbeakley/project/hisat2"
+outfile_name     <- "/projectnb/bf527/students/hbeakley/project/T2T"
+py               <- "python3"
+
+# Build full paths once
+splice_script <- file.path(hisat2_directory, "extract_splice_sites.py")
+exon_script   <- file.path(hisat2_directory, "extract_exons.py")
+
+# Check they exist
+file.exists(splice_script)
+file.exists(exon_script)
+
+# Annotated splice sites
+cmd_splice <- paste(
+  py,
+  splice_script,
+  gtf_file,
+  ">",
+  paste0(outfile_name, "_known_splice_sites.txt")
+)
+cat("Running:\n", cmd_splice, "\n")
+system(cmd_splice)
+
+# Annotated exon coordinates
+cmd_exons <- paste(
+  py,
+  exon_script,
+  gtf_file,
+  ">",
+  paste0(outfile_name, "_exon_coordinates.bed")
+)
+cat("Running:\n", cmd_exons, "\n")
+system(cmd_exons)
+
+# Now read the exon coordinates
+f <- fread(paste0(outfile_name, "_exon_coordinates.bed"))
+head(f)
+
+
+```
+
+
+
+```{r}
+f[,V2_1:=V2+1,by=V2]
+f[,V2_2:=V2-1,by=V2]
+f[,V3_2:=V3-1,by=V3]
+f[,V3_1:=V3+1,by=V3]
+f[,chr_V2:=paste(V1,V2,sep=""),by=1:nrow(f)]
+f[,chr_V2_1:=paste(V1,V2_1,sep=""),by=1:nrow(f)]
+f[,chr_V2_2:=paste(V1,V2_2,sep=""),by=1:nrow(f)]
+f[,chr_V3:=paste(V1,V3,sep=""),by=1:nrow(f)]
+f[,chr_V3_1:=paste(V1,V3_1,sep=""),by=1:nrow(f)]
+f[,chr_V3_2:=paste(V1,V3_2,sep=""),by=1:nrow(f)]
+write.table(f, paste(outfile_name, "_exon_coordinates.bed", sep = ""), sep = "\t", row.names = FALSE, quote = FALSE)
+################################################################################
+################################################################################
+##############################################################################
+
+###############################################################################
+################ commands for making the gene coordinates files ###############
+##############################################################################
+genes = fread(gtf_file, skip = ";")
+genes = genes[V3 == "gene"]
+genes[, gene_name:=strsplit(V9,split=";")[[1]][1], by = V9]
+genes[, gene_name:=gsub("gene_id ","",gene_name), by = gene_name]
+genes[, gene_name:=gsub("\"","",gene_name), by = gene_name]
+genes[, V9:=NULL]
+genes = genes[,list(V1,V4,V5,gene_name,V6,V7)]
+write.table(genes, paste(outfile_name, "_genes.bed", sep = ""), row.names = FALSE, sep = "\t", col.names = FALSE, quote = FALSE)
+################################################################################
+################################################################################
+##############################################################################
+```
+
+
